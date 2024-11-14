@@ -1,1 +1,2 @@
 # AntiVirus
+*YARA based antivirus
