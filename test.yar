@@ -1,9 +1,12 @@
-
+//comment
+/*
+comment
+*/
 
 rule MSIETabularActivex
 {
         meta:
-                ref = "CVE-2010-0805"
+                ref = "CVE-2010-0805" //comment
                 impact = 7
                 hide = true
                 author = "@d3t0n4t0r"

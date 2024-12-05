@@ -1,7 +1,7 @@
-from SYCOMPILER import SYCOMPILER
-import parser
-pars = parser.YaraLoader('.')
-sycomp = SYCOMPILER()
+from YaraCompiler import YaraCompiler
+import YaraParser
+pars = YaraParser.YaraLoader('.')
+sycomp = YaraCompiler()
 for rule in pars.load_rules():
     print(rule.print_rule())
     print()
