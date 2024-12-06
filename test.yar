@@ -11,7 +11,7 @@ rule MSIETabularActivex
                 hide = true
                 author = "@d3t0n4t0r"
         strings:
-                $cve20100805_1 = pp
+                $cve20100805_1 = "333C7BC4-460F-11D0-BC04-0080C7055A83" nocase fullword
                 $cve20100805_2 = "DataURL" nocase fullword
                 $cve20100805_3 = "true"
         condition:

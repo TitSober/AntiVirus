@@ -1,4 +1,3 @@
-import base64
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
@@ -6,15 +5,27 @@ import re
 import YaraRule
 
 
-    
-class YaraParser: #parses rules into metadata, strings and conditions
+class YaraRule:
+    def __init__(self, name, meta, strings, condition):
+        self.name = name
+        self.meta = meta
+        self.strings = strings
+        self.condition = condition
+    def print_rule(self):
+        print(self.name)
+        print(self.meta)
+        print(self.strings)
+        print(self.condition)
+
+
+
+
+
+class YaraParser:
     def __init__(self, rule_text):
         self.rules = []
         self.parse_rules(rule_text)
-    def split2(self,string, delim):
-        split_parts = string.split(delim)
-        cleaned_string = ''.join(split_parts)
-        return cleaned_string
+
     def parse_rules(self,rule_text):
         #splitting the text over the rules strings and condition
         rule_name,rule_body = rule_text.split("{")
@@ -22,7 +33,7 @@ class YaraParser: #parses rules into metadata, strings and conditions
         rule_body = rule_body[:-1]
         meta = self.parse_meta(rule_body)
         strings = self.parse_strings(rule_body)
-        condition = self.parse_condition(rule_body,strings)
+        condition = self.parse_condition(rule_body)
         self.rules.append(YaraRule(rule_name, meta, strings, condition))
 
    
@@ -32,9 +43,8 @@ class YaraParser: #parses rules into metadata, strings and conditions
         if meta_block:#če je bil match
             meta_lines = meta_block.group(1).strip().splitlines()#prvi group od matcha strippamo vseh whitespacov in ga splittamo po vrsticah
             for line in meta_lines:
-                if not re.match(r'^\s*//.*', line):
-                    key, value = line.split('=', 1) #splitamo metapodatke
-                    meta[key.strip()] = value.strip().strip('"') #sfriziramo podatke za shranitev v slovar
+                key, value = line.split('=', 1) #splitamo metapodatke
+                meta[key.strip()] = value.strip().strip('"') #sfriziramo podatke za shranitev v slovar
         return meta
 
     def parse_strings(self, rule_body):
@@ -45,46 +55,76 @@ class YaraParser: #parses rules into metadata, strings and conditions
             string_lines = strings_block.group(1).strip().splitlines()
             string_lines = string_lines[:-1]
             for line in string_lines:
-                if not re.match(r'^\s*//.*', line):
-                    key, value = line.split('=', 1)
-                    strings[key.strip()] = value.strip().strip('"').strip('{}')
-                    strings[key.strip()] = self.split2(strings[key.strip()], '"')
+                key, value = line.split('=', 1)
+                strings[key.strip()] = value.strip().strip('"').strip('{}')
         return strings
 
-    def parse_condition(self, rule_body,strings):
+    def parse_condition(self, rule_body):
         condition_block = re.search(r'condition\s*:\s*(.*)', rule_body, re.S)
-        temp = condition_block.group(1).strip().split("}")[0] if condition_block else ''
-        if "any of them" in temp:
-            tempString = " or ".join(strings.keys())
-            temp = temp.replace("any of them", tempString)
-        elif "all of them" in temp:
-            tempString = " and ".join(strings.keys())
-            temp = temp.replace("all of them", tempString)
-
-        return temp
+        return condition_block.group(1).strip() if condition_block else ''
 
 
     def get_rules(self):
         return self.rules
 
 
+class AntivirusScanner:
+    def __init__(self, rules):
+        self.rules = rules
+        self.compile_conditions()  # Pre-compile rule conditions
+
+    def compile_conditions(self):
+        for rule in self.rules:
+            rule.compiled_condition = self.compile_condition(rule.condition)
+
+    def compile_condition(self, condition):
+        eval_condition = condition
+        eval_condition = re.sub(r'#(\w+)', lambda m: f"self.string_matches.get('{m.group(1)}', 0)", eval_condition)
+        for var in re.findall(r'\$\w+', eval_condition):
+            eval_condition = eval_condition.replace(var, f"self.string_matches.get('{var}', False)")
+        return eval_condition
+
+    def scan_file(self, file_path):
+        with open(file_path, 'rb') as file:
+            file_content = file.read()
+            matches = []
+            for rule in self.rules:
+                if self.apply_rule(rule, file_content):
+                    matches.append(rule.name)
+            return matches
+
+    def apply_rule(self, rule, file_content):
+        self.string_matches = defaultdict(int)
+        for var_name, pattern in rule.strings.items():
+            count = len(re.findall(re.escape(pattern), file_content.decode(errors='ignore')))
+            self.string_matches[var_name] = count
+
+        # Evaluate the compiled condition
+        try:
+            return eval(rule.compiled_condition)
+        except Exception as e:
+            print(f"Error evaluating condition '{rule.condition}': {e}")
+            return False
+
+    def scan_directory(self, directory_path):
+        infected_files = {}
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(self.scan_file, os.path.join(root, file)): file 
+                       for root, _, files in os.walk(directory_path) for file in files}
+            for future in as_completed(futures):
+                file_path = futures[future]
+                matches = future.result()
+                if matches:
+                    infected_files[file_path] = matches
+        return infected_files
 
 
 
+with open("test.yar","r") as f:
+    rule_text = ""
+    rule_raw = f.readlines()
+    for line in rule_raw:
+        rule_text+=line
 
-class YaraLoader: #loads yara files from directory
-    def __init__(self, rule_path):
-        self.rule_path = rule_path
 
-    def load_rules(self):
-        rules = []
-        for root, _, files in os.walk(self.rule_path):
-            for file in files:
-                if file.endswith('.yar') or file.endswith('.yara'):
-                    with open(os.path.join(root, file), 'r') as f:
-                        rules.extend(self._parse_rules(f.read()))
-        return rules
 
-    def _parse_rules(self, rule_text):
-        parser = YaraParser(rule_text)
-        return parser.get_rules()
