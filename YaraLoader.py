@@ -1,4 +1,5 @@
 import YaraParser
+import os
 class YaraLoader: #loads yara files from directory
     def __init__(self, rule_path):
         self.rule_path = rule_path

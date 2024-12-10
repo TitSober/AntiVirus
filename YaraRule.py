@@ -4,11 +4,7 @@ class YaraRule:
         self.meta = meta
         self.strings = strings
         self.condition = condition
-    def print_rule(self):
-        print(self.name)
-        print(self.meta)
-        print(self.strings)
-        print(self.condition)
+  
     def getName(self):
         return self.name
     def getMeta(self):
